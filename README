@@ -574,3 +574,10 @@ series, can be used only in conjunction with compatible features. Enabling
 incompatible features, such as setting the `+pin` or the `+verification` flags
 in the `authfile` or the corresponding options in the PAM service configuration
 causes the authenticator to be ignored.
+
+== Untrusted authenticators and libcbor
+
+pam-u2f applies defense-in-depth measures against malicious or
+malfunctioning FIDO authenticators, including CBOR messages crafted to
+trigger oversized memory allocations in `libcbor`/`libfido2`. See
+link:SECURITY-CONSIDERATIONS.md[] for details.

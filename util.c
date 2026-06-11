@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/resource.h>
 #include <pwd.h>
 #include <errno.h>
 #include <unistd.h>
@@ -65,6 +66,75 @@ struct pk {
   void *ptr;
   int type;
 };
+
+/* Headroom (in bytes) added on top of the process' current address space
+ * usage by limit_address_space(). */
+#define ADDRESS_SPACE_HEADROOM (64UL * 1024 * 1024) /* 64 MiB */
+
+/* CTAP2 responses are CBOR-encoded, and some CBOR libraries (including
+ * libcbor, used by libfido2) allocate memory for array/map elements based
+ * on a count taken directly from the input, without checking it against
+ * the amount of input data actually available. A malicious or
+ * malfunctioning authenticator can therefore make libfido2 attempt a
+ * multi-gigabyte allocation while parsing a single CBOR message.
+ *
+ * To stop such an allocation from growing the host process (e.g. sshd,
+ * sudo, login, possibly running as root) without bound, temporarily lower
+ * RLIMIT_AS to the process' current address space size plus a fixed
+ * headroom while talking to an authenticator. The oversized allocation
+ * then fails with ENOMEM, which libcbor and libfido2 already handle as an
+ * ordinary parse error.
+ *
+ * On success, *old is set to the previous limit (which the caller must
+ * restore with restore_address_space()) and 1 is returned. If the current
+ * usage cannot be determined, or the resulting limit would not be at least
+ * as strict as the existing one, the limit is left untouched and 0 is
+ * returned. */
+static int limit_address_space(struct rlimit *old) {
+  struct rlimit rl;
+  long page_size;
+  long pages;
+  rlim_t cur_bytes;
+  FILE *f;
+
+  if (getrlimit(RLIMIT_AS, old) != 0)
+    return 0;
+
+  if ((page_size = sysconf(_SC_PAGESIZE)) <= 0)
+    return 0;
+
+  if ((f = fopen("/proc/self/statm", "re")) == NULL)
+    return 0;
+
+  if (fscanf(f, "%ld", &pages) != 1) {
+    fclose(f);
+    return 0;
+  }
+  fclose(f);
+
+  if (pages <= 0)
+    return 0;
+
+  cur_bytes = (rlim_t) pages * (rlim_t) page_size;
+  if (cur_bytes > RLIM_INFINITY - ADDRESS_SPACE_HEADROOM)
+    return 0;
+
+  rl = *old;
+  rl.rlim_cur = cur_bytes + ADDRESS_SPACE_HEADROOM;
+
+  /* Never loosen an existing, already stricter limit. */
+  if (old->rlim_cur != RLIM_INFINITY && rl.rlim_cur >= old->rlim_cur)
+    return 0;
+
+  if (setrlimit(RLIMIT_AS, &rl) != 0)
+    return 0;
+
+  return 1;
+}
+
+static void restore_address_space(const struct rlimit *old) {
+  setrlimit(RLIMIT_AS, old);
+}
 
 static int hex_decode(const char *ascii_hex, unsigned char **blob,
                       size_t *blob_len) {
@@ -1208,6 +1278,8 @@ int do_authentication(const cfg_t *cfg, const device_t *devices,
   struct opts opts;
   struct pk pk;
   char *pin = NULL;
+  struct rlimit as_old;
+  int as_limited;
 
   init_opts(&opts);
 #ifndef WITH_FUZZING
@@ -1216,6 +1288,11 @@ int do_authentication(const cfg_t *cfg, const device_t *devices,
   fido_init(0);
 #endif
   memset(&pk, 0, sizeof(pk));
+
+  /* Bound the address space for the duration of the authentication
+   * attempt, to contain oversized allocations triggered while parsing
+   * CBOR messages from a malicious or malfunctioning authenticator. */
+  as_limited = limit_address_space(&as_old);
 
   devlist = fido_dev_info_new(DEVLIST_LEN);
   if (!devlist) {
@@ -1365,6 +1442,9 @@ int do_authentication(const cfg_t *cfg, const device_t *devices,
   }
 
 out:
+  if (as_limited)
+    restore_address_space(&as_old);
+
   if (retval != PAM_SUCCESS) {
     if (last_err != FIDO_OK) {
       AUDIT_LOG(pamh, LOG_NOTICE,
@@ -1466,6 +1546,8 @@ int do_manual_authentication(const cfg_t *cfg, const device_t *devices,
   unsigned i = 0;
   unsigned last_idx = 0;
   struct opts opts;
+  struct rlimit as_old;
+  int as_limited;
 
   init_opts(&opts);
   memset(assert, 0, sizeof(assert));
@@ -1476,6 +1558,12 @@ int do_manual_authentication(const cfg_t *cfg, const device_t *devices,
 #else
   fido_init(0);
 #endif
+
+  /* manual_get_assert() feeds attacker-influenceable authenticator data
+   * (pasted by the user) into fido_assert_set_authdata(), which parses a
+   * CBOR extensions blob; bound the address space for the same reason as
+   * in do_authentication(). */
+  as_limited = limit_address_space(&as_old);
 
   for (i = 0; i < n_devs; ++i) {
     /* options used during authentication */
@@ -1555,6 +1643,9 @@ int do_manual_authentication(const cfg_t *cfg, const device_t *devices,
   }
 
 out:
+  if (as_limited)
+    restore_address_space(&as_old);
+
   if (retval != PAM_SUCCESS) {
     if (last_err != FIDO_OK) {
       AUDIT_LOG(pamh, LOG_NOTICE,

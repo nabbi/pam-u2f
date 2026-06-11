@@ -78,6 +78,7 @@ DEFS = -DDEBUG_PAM -DPAM_DEBUG @DEFS@
 EXTRA_DIST = export.sym
 EXTRA_DIST += export.gnu export.llvm
 EXTRA_DIST += CMakeLists.txt cmake/FindPAM.cmake
+EXTRA_DIST += SECURITY-CONSIDERATIONS.md
 
 # Release
 
