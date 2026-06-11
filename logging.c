@@ -44,7 +44,7 @@ static void do_log(int level, const char *file, int line, const char *func,
   fprintf(stderr, FORMAT, level_name(level), file, line, func, msg, suffix);
   fputc('\n', stderr);
 #else
-  syslog(LOG_AUTHPRIV | LOG_DEBUG, FORMAT, level_name(level), file, line, func,
+  syslog(LOG_AUTHPRIV | level, FORMAT, level_name(level), file, line, func,
          msg, suffix);
 #endif
 }
