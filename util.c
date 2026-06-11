@@ -1165,7 +1165,7 @@ err:
 /* Map a "notable" libfido2 error code to a short, user-facing reason for
  * audit logging. Returns NULL for errors that don't warrant a dedicated
  * reason (e.g. a device simply not matching the requested credential). */
-static const char *fido_failure_reason(int r) {
+const char *fido_failure_reason(int r) {
   switch (r) {
     case FIDO_ERR_PIN_INVALID:
       return "invalid PIN";

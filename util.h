@@ -46,6 +46,7 @@ int random_bytes(void *, size_t);
 int cose_type(const char *, int *);
 const char *cose_string(int);
 char *expand_variables(const char *, const char *);
+const char *fido_failure_reason(int);
 
 #if !defined(HAVE_EXPLICIT_BZERO)
 void explicit_bzero(void *, size_t);
