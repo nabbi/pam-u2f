@@ -283,7 +283,7 @@ int cfg_init(cfg_t *cfg, int flags, int argc, const char **argv) {
 
 exit:
   if (cfg->debug) {
-    log_debug_enable();
+    log_set_level(LOG_DEBUG);
     LOG(LOG_DEBUG, "called.");
     LOG(LOG_DEBUG, "flags %d argc %d", flags, argc);
     for (i = 0; i < argc; i++) {

@@ -747,7 +747,7 @@ int main(void) {
   const struct passwd *pwd;
   char *username;
 
-  log_debug_enable();
+  log_set_level(LOG_DEBUG);
 
   assert((pwd = getpwuid(geteuid())) != NULL);
   assert((username = strdup(pwd->pw_name)) != NULL);

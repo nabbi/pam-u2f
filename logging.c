@@ -12,7 +12,7 @@
 #define FORMAT "%s(pam_u2f): %s:%d (%s): %s%s"
 #define MSGLEN 2048
 
-static _Thread_local int g_debug_enabled = 0;
+static _Thread_local int g_min_level = LOG_INFO;
 
 static const char *level_name(int level) {
   switch (level) {
@@ -70,7 +70,7 @@ void log_printf(int level, const char *file, int line, const char *func,
                 const char *fmt, ...) {
   va_list ap;
 
-  if (level == LOG_DEBUG && !g_debug_enabled)
+  if (level > g_min_level)
     return;
 
   va_start(ap, fmt);
@@ -78,4 +78,4 @@ void log_printf(int level, const char *file, int line, const char *func,
   va_end(ap);
 }
 
-void log_debug_enable(void) { g_debug_enabled = 1; }
+void log_set_level(int level) { g_min_level = level; }

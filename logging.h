@@ -23,6 +23,7 @@
 void log_printf(int level, const char *, int, const char *, const char *, ...)
   ATTRIBUTE_FORMAT(printf, 5, 6);
 
-void log_debug_enable(void);
+/* Messages less severe (numerically greater) than level are discarded. */
+void log_set_level(int level);
 
 #endif /* LOGGING_H */
