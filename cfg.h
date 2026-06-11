@@ -14,6 +14,7 @@ typedef struct {
   unsigned max_devs;
   int manual;
   int debug;
+  int loglevel;
   int nouserok;
   int openasuser;
   int alwaysok;
