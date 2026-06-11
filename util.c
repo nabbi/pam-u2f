@@ -22,9 +22,19 @@
 #include <string.h>
 #include <arpa/inet.h>
 
+#ifdef HAVE_SECURITY_PAM_EXT_H
+#include <security/pam_ext.h>
+#endif
+
 #include "b64.h"
 #include "logging.h"
 #include "util.h"
+
+#ifdef HAVE_PAM_SYSLOG
+#define AUDIT_LOG(pamh, prio, ...) pam_syslog((pamh), (prio), __VA_ARGS__)
+#else
+#define AUDIT_LOG(pamh, prio, ...) LOG((prio), __VA_ARGS__)
+#endif
 
 #define SSH_MAX_SIZE 8192
 #define SSH_HEADER "-----BEGIN OPENSSH PRIVATE KEY-----\n"
@@ -1273,6 +1283,10 @@ int do_authentication(const cfg_t *cfg, const device_t *devices,
           r = fido_assert_verify(assert, 0, pk.type, pk.ptr);
           if (r == FIDO_OK) {
             retval = PAM_SUCCESS;
+            AUDIT_LOG(pamh, LOG_INFO,
+                      "Successful FIDO authentication with publicKey %s "
+                      "(idx %u)",
+                      devices[i].publicKey, i);
             goto out;
           }
         }
@@ -1479,6 +1493,9 @@ int do_manual_authentication(const cfg_t *cfg, const device_t *devices,
     r = fido_assert_verify(assert[i], 0, pk[i].type, pk[i].ptr);
     if (r == FIDO_OK) {
       retval = PAM_SUCCESS;
+      AUDIT_LOG(pamh, LOG_INFO,
+                "Successful FIDO authentication with publicKey %s (idx %u)",
+                devices[i].publicKey, i);
       break;
     }
   }
