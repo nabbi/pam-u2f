@@ -1162,6 +1162,36 @@ err:
   return ok;
 }
 
+/* Map a "notable" libfido2 error code to a short, user-facing reason for
+ * audit logging. Returns NULL for errors that don't warrant a dedicated
+ * reason (e.g. a device simply not matching the requested credential). */
+static const char *fido_failure_reason(int r) {
+  switch (r) {
+    case FIDO_ERR_PIN_INVALID:
+      return "invalid PIN";
+    case FIDO_ERR_PIN_BLOCKED:
+      return "PIN blocked";
+    case FIDO_ERR_PIN_AUTH_BLOCKED:
+      return "PIN authentication blocked";
+    case FIDO_ERR_ACTION_TIMEOUT:
+      return "touch/action timeout";
+    case FIDO_ERR_UNSUPPORTED_OPTION:
+      return "unsupported option";
+    case FIDO_ERR_OPERATION_DENIED:
+      return "operation denied";
+#ifdef FIDO_ERR_UV_INVALID
+    case FIDO_ERR_UV_INVALID:
+      return "user verification failed";
+#endif
+#ifdef FIDO_ERR_UV_BLOCKED
+    case FIDO_ERR_UV_BLOCKED:
+      return "user verification blocked";
+#endif
+    default:
+      return NULL;
+  }
+}
+
 int do_authentication(const cfg_t *cfg, const device_t *devices,
                       const unsigned n_devs, pam_handle_t *pamh) {
   fido_assert_t *assert = NULL;
@@ -1170,9 +1200,11 @@ int do_authentication(const cfg_t *cfg, const device_t *devices,
   int cued = 0;
   int r;
   int retval = PAM_AUTH_ERR;
+  int last_err = FIDO_OK;
   size_t ndevs = 0;
   size_t ndevs_prev = 0;
   unsigned i = 0;
+  unsigned last_idx = 0;
   struct opts opts;
   struct pk pk;
   char *pin = NULL;
@@ -1290,6 +1322,10 @@ int do_authentication(const cfg_t *cfg, const device_t *devices,
             goto out;
           }
         }
+        if (r != FIDO_OK && fido_failure_reason(r) != NULL) {
+          last_err = r;
+          last_idx = i;
+        }
       }
     } else {
       LOG(LOG_DEBUG, "Device for this keyhandle is not present");
@@ -1329,6 +1365,18 @@ int do_authentication(const cfg_t *cfg, const device_t *devices,
   }
 
 out:
+  if (retval != PAM_SUCCESS) {
+    if (last_err != FIDO_OK) {
+      AUDIT_LOG(pamh, LOG_NOTICE,
+                "Failed FIDO authentication with publicKey %s (idx %u): %s",
+                devices[last_idx].publicKey, last_idx,
+                fido_failure_reason(last_err));
+    } else {
+      AUDIT_LOG(pamh, LOG_NOTICE,
+                "Failed FIDO authentication: no suitable authenticator found");
+    }
+  }
+
   reset_pk(&pk);
   fido_assert_free(&assert);
   fido_dev_info_free(&devlist, ndevs);
@@ -1414,7 +1462,9 @@ int do_manual_authentication(const cfg_t *cfg, const device_t *devices,
   int retval = PAM_AUTH_ERR;
   int n;
   int r;
+  int last_err = FIDO_OK;
   unsigned i = 0;
+  unsigned last_idx = 0;
   struct opts opts;
 
   init_opts(&opts);
@@ -1498,9 +1548,25 @@ int do_manual_authentication(const cfg_t *cfg, const device_t *devices,
                 devices[i].publicKey, i);
       break;
     }
+    if (fido_failure_reason(r) != NULL) {
+      last_err = r;
+      last_idx = i;
+    }
   }
 
 out:
+  if (retval != PAM_SUCCESS) {
+    if (last_err != FIDO_OK) {
+      AUDIT_LOG(pamh, LOG_NOTICE,
+                "Failed FIDO authentication with publicKey %s (idx %u): %s",
+                devices[last_idx].publicKey, last_idx,
+                fido_failure_reason(last_err));
+    } else {
+      AUDIT_LOG(pamh, LOG_NOTICE,
+                "Failed FIDO authentication: no suitable authenticator found");
+    }
+  }
+
   for (i = 0; i < n_devs; i++) {
     fido_assert_free(&assert[i]);
     reset_pk(&pk[i]);
