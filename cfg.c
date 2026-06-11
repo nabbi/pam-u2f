@@ -107,8 +107,11 @@ static int open_safely(int *outfd, size_t *outsize, const char *path) {
   int fd, r = -EINVAL;
   struct stat st;
 
-  if (*path != '/')
+  if (*path != '/') {
+    LOG(LOG_WARNING, "configuration file path '%s' is not absolute, ignoring",
+        path);
     return r;
+  }
 
   fd = open(path, O_RDONLY | O_CLOEXEC | O_NOCTTY | O_NOFOLLOW, 0);
   if (fd == -1)
@@ -118,11 +121,24 @@ static int open_safely(int *outfd, size_t *outsize, const char *path) {
     goto fail;
 
 #ifndef PAM_U2F_TESTING
-  if (st.st_uid != 0)
+  if (st.st_uid != 0) {
+    LOG(LOG_WARNING, "configuration file '%s' is not owned by root, ignoring",
+        path);
     goto fail;
+  }
 #endif
-  if (!S_ISREG(st.st_mode) || st.st_mode & (S_IWGRP | S_IWOTH))
+  if (!S_ISREG(st.st_mode)) {
+    LOG(LOG_WARNING, "configuration file '%s' is not a regular file, ignoring",
+        path);
     goto fail;
+  }
+  if (st.st_mode & (S_IWGRP | S_IWOTH)) {
+    LOG(LOG_WARNING,
+        "permissions %04o for configuration file '%s' are too open. Please "
+        "change the file mode bits to 0644 or more restrictive",
+        (unsigned int) st.st_mode & 0777, path);
+    goto fail;
+  }
   if (st.st_size < 0)
     goto fail;
 
@@ -208,8 +224,9 @@ static int cfg_load_defaults(cfg_t *cfg, const char *config_path) {
   int fd = -1, r;
   size_t fsize = 0;
   char *buffer = NULL;
+  const char *path = config_path ? config_path : CFG_DEFAULT_PATH;
 
-  r = open_safely(&fd, &fsize, config_path ? config_path : CFG_DEFAULT_PATH);
+  r = open_safely(&fd, &fsize, path);
 
   /* Only the default config file is allowed to be missing. */
   if (r == -ENOENT && config_path == NULL)
@@ -219,8 +236,10 @@ static int cfg_load_defaults(cfg_t *cfg, const char *config_path) {
     return PAM_SERVICE_ERR;
 
   r = slurp(fd, fsize, &buffer);
-  if (r)
+  if (r) {
+    LOG(LOG_WARNING, "unable to read configuration file '%s'", path);
     goto exit;
+  }
 
   cfg_load_buffer(cfg, buffer);
   cfg->defaults_buffer = buffer;
