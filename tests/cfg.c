@@ -5,6 +5,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #ifndef PATH_MAX
@@ -383,6 +384,44 @@ static void test_file_parser(void) {
   conf_file_clear(&cf);
 }
 
+static void test_config_rejections(void) {
+  // open_safely() rejects configuration files that are not a regular
+  // file, or whose permissions are too open. Both cases are logged at
+  // LOG_WARNING and reported as PAM_SERVICE_ERR.
+
+  const char *argv[] = {NULL, "debug"};
+  struct conf_file cf;
+  char *dir_arg;
+  char *dir_path;
+  int r;
+  cfg_t cfg;
+
+  // 1. Not a regular file (a directory).
+  dir_arg = generate_template();
+  dir_path = dir_arg + strlen("conf=");
+  assert(mkdtemp(dir_path) != NULL);
+
+  argv[0] = dir_arg;
+  r = cfg_init(&cfg, 0, sizeof(argv) / sizeof(*argv), argv);
+  assert(r == PAM_SERVICE_ERR);
+
+  rmdir(dir_path);
+  free(dir_arg);
+
+  // 2. Permissions too open (group/world-writable).
+  conf_file_init(&cf, NULL);
+  fputs("alwaysok\n", cf.out);
+  r = fflush(cf.out);
+  assert(r == 0);
+  assert(chmod(cf.path, 0666) == 0);
+
+  argv[0] = cf.arg;
+  r = cfg_init(&cfg, 0, sizeof(argv) / sizeof(*argv), argv);
+  assert(r == PAM_SERVICE_ERR);
+
+  conf_file_clear(&cf);
+}
+
 static void test_loglevel(void) {
   // loglevel= takes a syslog level name and overrides the legacy
   // debug bool; unknown level names are ignored.
@@ -438,5 +477,6 @@ int main(int argc, char **argv) {
   test_last_config_wins();
   test_file_corner_cases();
   test_file_parser();
+  test_config_rejections();
   test_loglevel();
 }

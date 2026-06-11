@@ -28,6 +28,10 @@ util_SOURCES = util.c
 util_CPPFLAGS = $(LIBFIDO2_CFLAGS) $(AM_CPPFLAGS)
 util_LDADD = $(top_builddir)/libmodule.la
 
+check_PROGRAMS += logging
+logging_SOURCES = logging.c ../logging.c
+logging_CFLAGS = -DPAM_U2F_TESTING -DDEBUG_PAM -DPAM_DEBUG $(AM_CFLAGS)
+
 TESTS = $(check_PROGRAMS)
 
 EXTRA_DIST = CMakeLists.txt

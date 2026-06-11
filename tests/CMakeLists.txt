@@ -99,3 +99,10 @@ target_link_libraries(util PRIVATE
 	pam_u2f_testing
 )
 add_test(NAME util COMMAND util)
+
+add_executable(logging logging.c)
+target_link_libraries(logging PRIVATE
+	common
+	pam_u2f_testing
+)
+add_test(NAME logging COMMAND logging)
