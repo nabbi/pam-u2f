@@ -15,3 +15,4 @@ noinst_PROGRAMS = fuzz_format_parsers fuzz_auth
 
 EXTRA_DIST = coverage.sh make_seed.py export.sym
 EXTRA_DIST += export.gnu CMakeLists.txt
+EXTRA_DIST += seed/auth_cbor_array_oom
