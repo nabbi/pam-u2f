@@ -61,6 +61,7 @@ pam_u2f_la_LDFLAGS += -Wl,--wrap=pam_get_user
 pam_u2f_la_LDFLAGS += -Wl,--wrap=pam_get_item
 pam_u2f_la_LDFLAGS += -Wl,--wrap=pam_modutil_drop_priv
 pam_u2f_la_LDFLAGS += -Wl,--wrap=pam_modutil_regain_priv
+pam_u2f_la_LDFLAGS += -Wl,--wrap=pam_syslog
 pam_u2f_la_LDFLAGS += -Wl,--wrap=BIO_new
 pam_u2f_la_LDFLAGS += -Wl,--wrap=BIO_write
 pam_u2f_la_LDFLAGS += -Wl,--wrap=BIO_read
